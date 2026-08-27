@@ -268,6 +268,37 @@ struct NotchGeometry {
         )
     }
 
+    /// The visible compact island, in global screen coordinates.
+    ///
+    /// This is deliberately based on the physical notch metrics rather than
+    /// `collapsedDepth`. On a synthetic display the latter may be reduced to
+    /// an 8 pt top strip to avoid covering status items; that protection must
+    /// never shrink the island that is actually drawn on a real notch.
+    var collapsedVisualRect: CGRect {
+        includingTopEdge(CGRect(
+            x: notchCenterX - notchSize.width / 2,
+            y: screen.frame.maxY - notchSize.height,
+            width: notchSize.width,
+            height: notchSize.height
+        ))
+    }
+
+    /// The compact island's click target, in global screen coordinates.
+    ///
+    /// A physical notch and an uncrowded synthetic notch are clickable over
+    /// their complete visible height. The crowded synthetic-screen exception
+    /// remains the existing 8 pt top strip so menu-bar icons below it are not
+    /// intercepted; this is the only intentional visual/click difference.
+    var collapsedClickRect: CGRect {
+        let depth = collapsedDepth
+        return includingTopEdge(CGRect(
+            x: collapsedVisualRect.minX,
+            y: screen.frame.maxY - depth,
+            width: collapsedVisualRect.width,
+            height: depth
+        ))
+    }
+
     /// Depth of the collapsed target, measured down from the top edge.
     ///
     /// A real notch is a hole: the whole of it can be claimed, because there is
@@ -284,19 +315,22 @@ struct NotchGeometry {
     /// like the hole: it answers everywhere it is drawn.
     var collapsedDepth: CGFloat { guardsIcons ? 8 : notchSize.height }
 
-    /// Size of the collapsed target: the notch itself, or the strip above.
-    var collapsedSize: CGSize { CGSize(width: notchSize.width, height: collapsedDepth) }
+    /// Size of the collapsed click target: the notch itself, or the protected
+    /// strip on a crowded synthetic display.
+    var collapsedSize: CGSize {
+        CGSize(width: notchSize.width, height: collapsedDepth)
+    }
 
-    /// A scroll gesture needs more vertical room than the invisible click
-    /// strip. Keep this region limited to the notch's horizontal span so it
-    /// does not interfere with menu-bar controls, but allow the pointer to
-    /// rest a little below the physical 8 pt strip while the user scrolls.
+    /// A scroll gesture needs more vertical room than the click target. Keep
+    /// it limited to the visible island's horizontal span so it does not
+    /// interfere with menu-bar controls, and allow the pointer to rest below
+    /// the island while the user scrolls.
     var collapsedGestureRect: CGRect {
-        let depth = max(collapsedDepth, 44)
+        let depth = max(collapsedVisualRect.height, 44)
         return includingTopEdge(CGRect(
-            x: notchCenterX - notchSize.width / 2,
+            x: collapsedVisualRect.minX,
             y: screen.frame.maxY - depth,
-            width: notchSize.width,
+            width: collapsedVisualRect.width,
             height: depth
         ))
     }
@@ -309,10 +343,10 @@ struct NotchGeometry {
         // where a menu bar underneath would feel it.
         let slack: CGFloat = guardsIcons ? 0 : 4
         return includingTopEdge(CGRect(
-            x: notchCenterX - notchSize.width / 2 - 6,
-            y: screen.frame.maxY - collapsedDepth - slack,
-            width: notchSize.width + 12,
-            height: collapsedDepth + slack
+            x: collapsedClickRect.minX - 6,
+            y: collapsedClickRect.minY - slack,
+            width: collapsedClickRect.width + 12,
+            height: collapsedClickRect.height + slack
         ))
     }
 

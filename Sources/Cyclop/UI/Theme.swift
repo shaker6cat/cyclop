@@ -2,6 +2,10 @@ import SwiftUI
 
 enum Theme {
     static let openAnimation = Animation.spring(response: 0.27, dampingFraction: 0.82)
+    /// Shared by the shell silhouette and its content so the island grows as
+    /// one object from the menu-bar anchor instead of swapping two panels.
+    static let dynamicIslandAnimation = Animation.spring(response: 0.34, dampingFraction: 0.84)
+    static let dynamicIslandSizeAnimation = Animation.spring(response: 0.30, dampingFraction: 0.86)
     static let contentAnimation = Animation.easeOut(duration: 0.16)
     /// Pane switching: the outgoing pane leaves faster than the incoming one
     /// arrives, so the two are never both half-visible for long.

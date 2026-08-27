@@ -19,27 +19,7 @@ struct NotchContentView: View {
     private var size: CGSize { panel.bodySize }
 
     var body: some View {
-        // The expanded silhouette is wider than the body by `topRadius` on
-        // each side: that slack is where the concave shoulders live. The
-        // folded silhouette is a separate pill, matching Dynamic Island's
-        // compact state; both silhouettes share the same animated size.
-        ZStack(alignment: .top) {
-            if isOpen {
-                NotchShape(
-                    topRadius: Theme.openTopRadius,
-                    bottomRadius: Theme.openBottomRadius
-                )
-                .fill(Color.black)
-                .frame(width: size.width + 2 * Theme.openTopRadius, height: size.height)
-                .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
-                .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .top)))
-            } else {
-                Capsule(style: .continuous)
-                    .fill(Color.black)
-                    .frame(width: size.width, height: size.height)
-                    .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .top)))
-            }
-
+        DynamicIslandShell(isExpanded: isOpen, bodySize: size) {
             VStack(spacing: 0) {
                 header
                 if isOpen {
@@ -47,16 +27,8 @@ struct NotchContentView: View {
                         .transition(.opacity)
                 }
             }
-            .frame(width: size.width, height: size.height, alignment: .top)
-            .clipped()
         }
-        .frame(
-            width: size.width + (isOpen ? 2 * Theme.openTopRadius : 0),
-            height: size.height,
-            alignment: .top
-        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(Theme.openAnimation, value: isOpen)
         .animation(Theme.paneAnimation, value: vm.tab)
     }
 

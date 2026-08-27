@@ -368,9 +368,10 @@ final class NotchScreenPanel {
             rect = rect.insetBy(dx: -Theme.openTopRadius, dy: 0)
         }
         rootView.activeRect = rect
-        pointer.interactiveRect = geometry
-            .contentScreenRect(for: size)
-            .insetBy(dx: open ? -Theme.openTopRadius : 0, dy: 0)
+        pointer.interactiveRect = open
+            ? geometry.contentScreenRect(for: size)
+                .insetBy(dx: -Theme.openTopRadius, dy: 0)
+            : geometry.collapsedClickRect
     }
 
     /// Treat one precise trackpad gesture as one wheel detent. The sign of the
