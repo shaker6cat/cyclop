@@ -30,10 +30,19 @@ final class CalendarStore: ObservableObject {
     }
 
     var monthTitle: String {
+        monthTitle(for: displayedMonth)
+    }
+
+    func monthTitle(for month: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "MMMM yyyy年"
-        return formatter.string(from: displayedMonth)
+        return formatter.string(from: month)
+    }
+
+    /// Stable identity for a month section in the vertical calendar list.
+    func monthStartID(for month: Date) -> Date {
+        calendar.startOfMonth(for: month)
     }
 
     var compactDateText: String {
@@ -46,20 +55,34 @@ final class CalendarStore: ObservableObject {
 
     var weekdayNames: [String] { ["一", "二", "三", "四", "五", "六", "日"] }
 
-    /// Two rows match the supplied reference: current week plus the following week.
+    /// Dates for the month grid, including leading and trailing days needed to
+    /// complete the surrounding weeks.
     var days: [Day] {
-        let anchor = calendar.isDate(displayedMonth, equalTo: now, toGranularity: .month) ? now : displayedMonth
-        let first = calendar.startOfWeek(for: anchor)
-        let month = calendar.component(.month, from: displayedMonth)
-        return (0..<14).compactMap { offset in
+        days(for: displayedMonth)
+    }
+
+    func days(for month: Date) -> [Day] {
+        let first = calendar.startOfWeek(for: calendar.startOfMonth(for: month))
+        let displayedMonth = calendar.dateComponents([.year, .month], from: month)
+        let monthInterval = calendar.dateInterval(of: .month, for: month)
+        let last = monthInterval?.end ?? month
+        let lastWeek = calendar.startOfWeek(for: last.addingTimeInterval(-1))
+        let count = (calendar.dateComponents([.day], from: first, to: lastWeek).day ?? 0) + 7
+
+        return (0..<count).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: first) else { return nil }
             return Day(
                 date: date,
                 number: calendar.component(.day, from: date),
                 isToday: calendar.isDate(date, inSameDayAs: now),
-                isInDisplayedMonth: calendar.component(.month, from: date) == month
+                isInDisplayedMonth: calendar.dateComponents([.year, .month], from: date) == displayedMonth
             )
         }
+    }
+
+    func month(atOffset offset: Int) -> Date {
+        calendar.date(byAdding: .month, value: offset, to: calendar.startOfMonth(for: now))
+            ?? calendar.startOfMonth(for: now)
     }
 
     func start() {

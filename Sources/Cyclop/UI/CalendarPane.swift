@@ -3,23 +3,39 @@ import SwiftUI
 struct CalendarPane: View {
     @ObservedObject var calendar: CalendarStore
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 7)
+    private let monthOffsets = Array(-24...24)
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center) {
-                Text(calendar.monthTitle)
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(.white)
-                Spacer(minLength: 0)
-                Button { calendar.moveMonth(by: -1) } label: { Image(systemName: "chevron.left") }
-                Button { calendar.moveMonth(by: 1) } label: { Image(systemName: "chevron.right") }
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    ForEach(monthOffsets, id: \.self) { offset in
+                        let month = calendar.month(atOffset: offset)
+                        monthView(month, offset: offset)
+                            .id(calendar.monthStartID(for: month))
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            .padding(.top, 2)
-            .padding(.bottom, 20)
+            .onAppear {
+                // LazyVStack needs one layout pass before the current month can
+                // be resolved reliably by ScrollViewReader.
+                let currentMonthID = calendar.monthStartID(for: calendar.month(atOffset: 0))
+                DispatchQueue.main.async {
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(currentMonthID, anchor: .top)
+                    }
+                }
+            }
+        }
+    }
+
+    private func monthView(_ month: Date, offset: Int) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(calendar.monthTitle(for: month))
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.white)
 
             LazyVGrid(columns: columns, spacing: 14) {
                 ForEach(calendar.weekdayNames, id: \.self) { weekday in
@@ -27,7 +43,7 @@ struct CalendarPane: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.tertiary)
                 }
-                ForEach(calendar.days) { day in
+                ForEach(calendar.days(for: month)) { day in
                     Text("\(day.number)日")
                         .font(.system(size: 16, weight: day.isToday ? .bold : .semibold))
                         .monospacedDigit()
@@ -42,10 +58,7 @@ struct CalendarPane: View {
                         }
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: calendar.displayedMonth)
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
     }
 }
 
