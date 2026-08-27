@@ -92,6 +92,7 @@ struct MediaPane: View {
                 .strokeBorder(Theme.hairline, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.5), radius: 12, y: 5)
+        .onTapGesture { media.openSource() }
         .animation(Theme.artworkAnimation, value: media.artwork)
     }
 

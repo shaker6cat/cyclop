@@ -5,6 +5,15 @@ struct NotchContentView: View {
     /// This screen's share of the panel. Everything the pointer decides is
     /// here; everything shown is in `vm`, the same on every display.
     @ObservedObject var panel: PanelState
+    /// Media is visible even while the panel is folded, so it must be observed
+    /// directly instead of relying on the view model's open-panel forwarding.
+    @ObservedObject private var media: MediaController
+
+    init(vm: NotchViewModel, panel: PanelState) {
+        self.vm = vm
+        self.panel = panel
+        self._media = ObservedObject(wrappedValue: vm.media)
+    }
 
     private var isOpen: Bool { panel.isActive }
     private var size: CGSize { panel.bodySize }
@@ -56,14 +65,21 @@ struct NotchContentView: View {
                     .padding(.leading, 16)
                     .id(vm.tab)
                     .transition(.opacity)
-            }
-            Spacer(minLength: 0)
-            Color.clear.frame(width: panel.geometry.notchSize.width, height: 1)
-            Spacer(minLength: 0)
-            if isOpen {
+                Spacer(minLength: 0)
+                Color.clear.frame(width: panel.geometry.notchSize.width, height: 1)
+                Spacer(minLength: 0)
                 trailing
                     .padding(.trailing, 16)
                     .transition(.opacity)
+            } else if media.track != nil {
+                MiniNowPlayingView(
+                    artwork: media.artwork,
+                    isPlaying: media.isPlaying
+                )
+                .frame(width: panel.geometry.notchSize.width)
+                .transition(.opacity)
+            } else {
+                Color.clear.frame(width: panel.geometry.notchSize.width, height: 1)
             }
         }
         .frame(height: panel.geometry.notchSize.height)
@@ -74,10 +90,10 @@ struct NotchContentView: View {
         switch vm.tab {
         case .media:
             HStack(spacing: 6) {
-                if vm.media.track != nil {
-                    EqualizerBars(isAnimating: vm.media.isPlaying)
+                if media.track != nil {
+                    EqualizerBars(isAnimating: media.isPlaying)
                 }
-                Text(vm.media.sourceName ?? "")
+                Text(media.sourceName ?? "")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Theme.tertiary)
             }

@@ -20,6 +20,11 @@ final class MediaController: ObservableObject {
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var position: TimeInterval = 0
     @Published private(set) var sourceName: String?
+    @Published private(set) var sourcePID: pid_t?
+    /// Last confirmed bundle of the visible source app. The MediaRemote PID
+    /// may disappear when the source window is closed, so PID alone is not
+    /// sufficient to reopen it.
+    private var sourceBundleID: String?
     /// Whether the player accepts skipping at all. A browser tab playing one
     /// video registers no handler for it — the command leaves and nothing
     /// happens — so the buttons go dim rather than dead, the way the system's
@@ -38,6 +43,10 @@ final class MediaController: ObservableObject {
     private var pendingSeek: (target: TimeInterval, at: Date)?
     private var ticker: Timer?
     private var observers: [Any] = []
+    /// A short empty response can occur while a player changes state. Delay
+    /// clearing so pause/resume does not erase the last valid cover and track.
+    private var pendingClear: DispatchWorkItem?
+    private var lastLoggedMediaState: String?
     /// Whether the panel is open — the ticker below runs only then.
     private var isActive = false
 
@@ -50,6 +59,8 @@ final class MediaController: ObservableObject {
     }
 
     func stop() {
+        pendingClear?.cancel()
+        pendingClear = nil
         feed.stop()
         observers.forEach { DistributedNotificationCenter.default().removeObserver($0) }
         observers.removeAll()
@@ -94,6 +105,92 @@ final class MediaController: ObservableObject {
         dispatch(feed: .previous, script: { PlayerBridge.previous($0) }, key: .previous)
     }
 
+    /// Activates the application that owns the current Now Playing session.
+    /// A browser is intentionally opened only at application level here; a
+    /// browser tab requires a separate integration and is outside this phase.
+    func openSource() {
+        NSLog("Cyclop: open source requested (name=%@ pid=%d)", sourceName ?? "<none>", sourcePID ?? 0)
+        if let sourcePID,
+           let application = NSRunningApplication(processIdentifier: sourcePID),
+           !application.isTerminated {
+            let isMediaRenderer = application.bundleIdentifier?.contains("WebKit") == true
+                || (sourceName?.lowercased().contains("graphics and media") == true)
+            let activated = !isMediaRenderer && application.activate(options: [.activateAllWindows])
+            NSLog("Cyclop: source PID activation %@ (app=%@ bundle=%@)", activated ? "succeeded" : "failed", application.localizedName ?? "<unknown>", application.bundleIdentifier ?? "<none>")
+            if activated, isMediaRenderer == false, let bundleURL = application.bundleURL {
+                // activate() can succeed while the app has no window because
+                // its last window was closed. Opening the .app asks AppKit to
+                // create/reopen its main window as well.
+                let configuration = NSWorkspace.OpenConfiguration()
+                NSLog("Cyclop: reopening source application (%@)", bundleURL.path)
+                NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration)
+                return
+            }
+            if activated { return }
+
+            // MediaRemote may report a non-renderer helper PID instead of the
+            // visible app PID. Its bundle URL can still point at the owning
+            // .app, which gives us a generic recovery path. WebKit renderers
+            // are excluded: their URL is the system XPC, not the player .app.
+            if !isMediaRenderer, let bundleURL = application.bundleURL {
+                let configuration = NSWorkspace.OpenConfiguration()
+                NSLog("Cyclop: opening source bundle from PID (%@)", bundleURL.path)
+                NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration)
+                return
+            }
+        }
+
+        // Kaset and similar WebKit-based players publish the renderer's name
+        // and PID. Resolve the visible application by its localized name
+        // before falling back to a remembered bundle ID.
+        if let visibleApp = visibleSourceApplication(named: sourceName) {
+            sourceBundleID = visibleApp.bundleIdentifier
+            let activated = visibleApp.activate(options: [.activateAllWindows])
+            NSLog("Cyclop: visible source activation %@ (app=%@ bundle=%@)", activated ? "succeeded" : "failed", visibleApp.localizedName ?? "<unknown>", visibleApp.bundleIdentifier ?? "<none>")
+            if let bundleURL = visibleApp.bundleURL {
+                let configuration = NSWorkspace.OpenConfiguration()
+                NSLog("Cyclop: opening visible source application (%@)", bundleURL.path)
+                NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration)
+                return
+            }
+            if activated { return }
+        }
+
+        // Some media sessions expose a PID that belongs to a helper process
+        // rather than the user-facing player. Fall back to the known player
+        // bundle when the source name identifies one of our scriptable apps.
+        let normalized = sourceName?.lowercased() ?? ""
+        let bundleID: String?
+        if normalized.contains("music") || normalized.contains("音乐") {
+            bundleID = "com.apple.Music"
+        } else if normalized.contains("spotify") {
+            bundleID = "com.spotify.client"
+        } else {
+            bundleID = sourceBundleID ?? activeApp?.bundleID
+        }
+
+        guard let bundleID else { return }
+        if let application = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID).first {
+            let activated = application.activate(options: [.activateAllWindows])
+            NSLog("Cyclop: bundle activation %@ (%@)", activated ? "succeeded" : "failed", bundleID)
+            if let bundleURL = application.bundleURL {
+                let configuration = NSWorkspace.OpenConfiguration()
+                NSLog("Cyclop: reopening bundle application (%@)", bundleID)
+                NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration)
+                return
+            }
+            if activated { return }
+        }
+
+        // Last resort: ask Workspace to bring the application forward even if
+        // its current process did not accept activation.
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        NSLog("Cyclop: opening application through Workspace (%@)", bundleID)
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+    }
+
     func seek(to seconds: TimeInterval) {
         guard duration > 0 else { return }
         let clamped = min(max(0, seconds), duration)
@@ -122,14 +219,40 @@ final class MediaController: ObservableObject {
 
     // MARK: - Feed
 
-    private func apply(_ snapshot: NowPlayingFeed.Snapshot) {
-        guard !snapshot.isEmpty else { return clear() }
+    private func visibleSourceApplication(named sourceName: String?) -> NSRunningApplication? {
+        guard let sourceName else { return nil }
+        let source = sourceName.lowercased()
+        return NSWorkspace.shared.runningApplications.first { application in
+            guard let name = application.localizedName?.lowercased() else { return false }
+            return source == name
+                || source.hasPrefix(name + " ")
+                || (source.hasSuffix(" graphics and media")
+                    && String(source.dropLast(" graphics and media".count)) == name)
+        }
+    }
 
-        let key = "\(snapshot.title)|\(snapshot.artist)|\(snapshot.album)"
+    private func apply(_ snapshot: NowPlayingFeed.Snapshot) {
+        guard !snapshot.isEmpty else { return scheduleClear() }
+        pendingClear?.cancel()
+        pendingClear = nil
+
+        // Album metadata is occasionally omitted during pause/resume. Keep
+        // the identity stable on title and artist so that this does not look
+        // like a new track and unnecessarily drops its artwork.
+        let key = "\(snapshot.title)|\(snapshot.artist)"
         track = Track(title: snapshot.title, artist: snapshot.artist, album: snapshot.album, key: key)
         isPlaying = snapshot.isPlaying || snapshot.rate > 0
         duration = snapshot.duration
         sourceName = snapshot.source
+        sourcePID = snapshot.sourcePID
+        if let visibleApp = visibleSourceApplication(named: snapshot.source) {
+            sourceBundleID = visibleApp.bundleIdentifier
+        }
+        let mediaState = "\(key)|playing=\(isPlaying)|source=\(sourceName ?? "<none>")|pid=\(sourcePID ?? 0)|artwork=\(snapshot.artwork != nil)"
+        if mediaState != lastLoggedMediaState {
+            NSLog("Cyclop: media state %@", mediaState)
+            lastLoggedMediaState = mediaState
+        }
         // Both directions travel together: no player has ever offered one
         // without the other, and two separately dimmed arrows would read as
         // a glitch rather than a limit.
@@ -179,6 +302,8 @@ final class MediaController: ObservableObject {
     }
 
     private func clear() {
+        pendingClear?.cancel()
+        pendingClear = nil
         activeApp = nil
         track = nil
         artwork = nil
@@ -187,8 +312,19 @@ final class MediaController: ObservableObject {
         duration = 0
         position = 0
         sourceName = nil
+        sourcePID = nil
+        lastLoggedMediaState = nil
         canSkip = true
         updateTicker()
+    }
+
+    private func scheduleClear() {
+        guard pendingClear == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in self?.clear() }
+        }
+        pendingClear = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: work)
     }
 
     // MARK: - Fallback: scriptable players only
@@ -223,7 +359,11 @@ final class MediaController: ObservableObject {
 
             self.activeApp = state.app
             self.sourceName = state.app.displayName
-            self.track = Track(title: state.title, artist: state.artist, album: state.album, key: state.key)
+            self.sourcePID = NSRunningApplication
+                .runningApplications(withBundleIdentifier: state.app.bundleID)
+                .first?.processIdentifier
+            let stableKey = "\(state.title)|\(state.artist)"
+            self.track = Track(title: state.title, artist: state.artist, album: state.album, key: stableKey)
             self.isPlaying = state.isPlaying
             self.duration = state.duration
             self.adopt(state.position)

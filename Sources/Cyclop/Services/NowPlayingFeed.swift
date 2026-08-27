@@ -19,6 +19,8 @@ final class NowPlayingFeed {
         var artwork: Data?
         /// Name of the app owning the session, resolved from its pid.
         var source: String?
+        /// Process identity of the app owning the Now Playing session.
+        var sourcePID: pid_t?
         /// Command codes the player offers right now, or nil when the helper
         /// could not ask. Nil means unknown, not none — a browser tab with a
         /// single video offers no skip commands at all, and that is worth
@@ -52,7 +54,23 @@ final class NowPlayingFeed {
     private var stopped = false
 
     private var helperPath: String? {
-        Bundle.main.path(forResource: "libcyclopmedia", ofType: "dylib")
+        if let bundled = Bundle.main.path(forResource: "libcyclopmedia", ofType: "dylib") {
+            return bundled
+        }
+
+        // SwiftPM's debug executable is not an app bundle. During development
+        // the helper is placed beside that executable by Scripts/run-dev.sh.
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // Services
+            .deletingLastPathComponent() // Cyclop
+            .deletingLastPathComponent() // Sources
+            .deletingLastPathComponent() // repository root
+        let currentRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let candidates = [
+            sourceRoot.appendingPathComponent(".build/arm64-apple-macosx/debug/libcyclopmedia.dylib"),
+            currentRoot.appendingPathComponent(".build/arm64-apple-macosx/debug/libcyclopmedia.dylib")
+        ]
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }?.path
     }
 
     // MARK: - Lifecycle
@@ -72,9 +90,12 @@ final class NowPlayingFeed {
     private func launch() {
         guard !stopped else { return }
         guard let helperPath, FileManager.default.isExecutableFile(atPath: "/usr/bin/perl") else {
+            NSLog("Cyclop: media helper path unavailable; run Scripts/run-dev.sh or bundle.sh")
             onUnavailable?()
             return
         }
+
+        NSLog("Cyclop: starting media helper at %@", helperPath)
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
@@ -207,6 +228,7 @@ final class NowPlayingFeed {
             snapshot.artwork = artwork
         }
         if let pid = object["pid"] as? Int, pid > 0 {
+            snapshot.sourcePID = pid_t(pid)
             snapshot.source = NSRunningApplication(processIdentifier: pid_t(pid))?.localizedName
         }
         if let codes = object["commands"] as? [Int] {

@@ -126,12 +126,10 @@ final class NotchViewModel: ObservableObject {
         // their own, so those would only refresh when something else happened
         // to redraw the view.
         //
-        // Forwarded only while the panel is open. Collapsed, there is nothing
-        // these redraws could change — the panel is a black shape — yet the
-        // stores keep their own schedule: a track change every few minutes, a
-        // copy whenever one happens, and each send re-evaluated the whole
-        // view for nobody. Opening repaints from the stores directly, because
-        // `isOpen` is itself @Published and its own send does that.
+        // Media is forwarded even while the panel is collapsed: its compact
+        // header shows artwork and playing state. The other stores remain
+        // gated by the open state because their content is not visible while
+        // folded and their updates should not redraw a black shape.
         //
         // The stores with a text field in their pane — the translator, the
         // snippets and the notes — are deliberately absent. They change on every
@@ -140,8 +138,11 @@ final class NotchViewModel: ObservableObject {
         // first letter typed is also the last one that lands. Their panes
         // observe them directly, and the header counter refreshes anyway,
         // because the list is only ever re-read on the way into the tab.
+        media.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
         for child in [
-            media.objectWillChange,
             shelf.objectWillChange,
             clipboard.objectWillChange,
             calendar.objectWillChange,
