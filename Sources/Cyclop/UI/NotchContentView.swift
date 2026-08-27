@@ -17,6 +17,7 @@ struct NotchContentView: View {
 
     private var isOpen: Bool { panel.isActive }
     private var size: CGSize { panel.bodySize }
+    private var collapsedSize: CGSize { panel.geometry.collapsedSize }
 
     var body: some View {
         DynamicIslandShell(isExpanded: isOpen, bodySize: size) {
@@ -64,13 +65,14 @@ struct NotchContentView: View {
                     isPlaying: media.isPlaying,
                     calendar: vm.calendar,
                     hasMedia: media.track != nil,
-                    faceHeight: panel.geometry.notchSize.height
+                    faceHeight: collapsedSize.height,
+                    scale: Theme.collapsedScale
                 )
-                    .frame(width: panel.geometry.notchSize.width)
+                    .frame(width: collapsedSize.width)
                     .transition(.opacity)
             }
         }
-        .frame(height: panel.geometry.notchSize.height)
+        .frame(height: isOpen ? panel.geometry.notchSize.height : collapsedSize.height)
     }
 
     @ViewBuilder

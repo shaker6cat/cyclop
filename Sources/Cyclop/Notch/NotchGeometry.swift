@@ -260,11 +260,25 @@ struct NotchGeometry {
 
     /// Rect the content occupies inside the window, in AppKit window coordinates.
     func contentRect(for size: CGSize) -> CGRect {
-        CGRect(
+        if size == collapsedSize {
+            return collapsedContentRect
+        }
+        return CGRect(
             x: (windowSize.width - size.width) / 2,
             y: windowSize.height - size.height,
             width: size.width,
             height: size.height
+        )
+    }
+
+    /// The window remains edge-anchored; only the compact body has breathing
+    /// room above it, so the expanded panel's established position is intact.
+    private var collapsedContentRect: CGRect {
+        CGRect(
+            x: (windowSize.width - collapsedSize.width) / 2,
+            y: windowSize.height - collapsedSize.height - Theme.collapsedTopGap,
+            width: collapsedSize.width,
+            height: collapsedSize.height
         )
     }
 
@@ -276,10 +290,10 @@ struct NotchGeometry {
     /// never shrink the island that is actually drawn on a real notch.
     var collapsedVisualRect: CGRect {
         includingTopEdge(CGRect(
-            x: notchCenterX - notchSize.width / 2,
-            y: screen.frame.maxY - notchSize.height,
-            width: notchSize.width,
-            height: notchSize.height
+            x: notchCenterX - collapsedSize.width / 2,
+            y: screen.frame.maxY - Theme.collapsedTopGap - collapsedSize.height,
+            width: collapsedSize.width,
+            height: collapsedSize.height
         ))
     }
 
@@ -293,7 +307,7 @@ struct NotchGeometry {
         let depth = collapsedDepth
         return includingTopEdge(CGRect(
             x: collapsedVisualRect.minX,
-            y: screen.frame.maxY - depth,
+            y: collapsedVisualRect.maxY - depth,
             width: collapsedVisualRect.width,
             height: depth
         ))
@@ -313,12 +327,13 @@ struct NotchGeometry {
     ///
     /// A notch the icons do not reach has neither problem, so it is treated
     /// like the hole: it answers everywhere it is drawn.
-    var collapsedDepth: CGFloat { guardsIcons ? 8 : notchSize.height }
+    var collapsedDepth: CGFloat { guardsIcons ? 8 : collapsedSize.height }
 
     /// Size of the collapsed click target: the notch itself, or the protected
     /// strip on a crowded synthetic display.
     var collapsedSize: CGSize {
-        CGSize(width: notchSize.width, height: collapsedDepth)
+        CGSize(width: notchSize.width * Theme.collapsedScale,
+               height: notchSize.height * Theme.collapsedScale)
     }
 
     /// A scroll gesture needs more vertical room than the click target. Keep
@@ -329,7 +344,7 @@ struct NotchGeometry {
         let depth = max(collapsedVisualRect.height, 44)
         return includingTopEdge(CGRect(
             x: collapsedVisualRect.minX,
-            y: screen.frame.maxY - depth,
+            y: collapsedVisualRect.maxY - depth,
             width: collapsedVisualRect.width,
             height: depth
         ))

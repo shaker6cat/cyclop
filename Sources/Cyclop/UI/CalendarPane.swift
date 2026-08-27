@@ -65,14 +65,15 @@ struct CalendarPane: View {
 /// The folded notch clock; independent of EventKit and updated every second.
 struct CalendarClockView: View {
     @ObservedObject var calendar: CalendarStore
+    @Environment(\.collapsedUIScale) private var scale
 
     var body: some View {
         Text(calendar.compactDateText)
-            .font(.system(size: 10, weight: .semibold).monospacedDigit())
+            .font(.system(size: 10 * scale, weight: .semibold).monospacedDigit())
             .foregroundStyle(.white.opacity(0.82))
             .lineLimit(1)
             .minimumScaleFactor(0.65)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 10 * scale)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

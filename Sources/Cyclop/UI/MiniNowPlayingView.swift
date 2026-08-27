@@ -10,6 +10,7 @@ struct MiniNowPlayingView: View {
     let isPlaying: Bool
 
     @State private var pulse = false
+    @Environment(\.collapsedUIScale) private var scale
 
     private let low: [CGFloat] = [4, 7, 5, 10, 6, 8, 4]
     private let high: [CGFloat] = [8, 12, 10, 18, 11, 14, 7]
@@ -20,13 +21,13 @@ struct MiniNowPlayingView: View {
                 Image(nsImage: artwork)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: 24, height: 24)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .frame(width: 24 * scale, height: 24 * scale)
+                    .clipShape(RoundedRectangle(cornerRadius: 6 * scale, style: .continuous))
             } else {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: 6 * scale, style: .continuous)
                     .fill(Theme.surfaceHover)
-                    .frame(width: 24, height: 24)
-                    .overlay(Image(systemName: "music.note").font(.system(size: 11)))
+                    .frame(width: 24 * scale, height: 24 * scale)
+                    .overlay(Image(systemName: "music.note").font(.system(size: 11 * scale)))
             }
 
             Spacer(minLength: 0)
@@ -41,7 +42,7 @@ struct MiniNowPlayingView: View {
                                 endPoint: .top
                             )
                         )
-                        .frame(width: 3, height: pulse && isPlaying ? high[index] : low[index])
+                        .frame(width: 3 * scale, height: (pulse && isPlaying ? high[index] : low[index]) * scale)
                         .animation(
                             isPlaying
                                 ? .easeInOut(duration: 0.48)
@@ -52,9 +53,9 @@ struct MiniNowPlayingView: View {
                         )
                 }
             }
-            .frame(height: 20, alignment: .center)
+            .frame(height: 20 * scale, alignment: .center)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 10 * scale)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { pulse = isPlaying }
         .onChange(of: isPlaying) { _, playing in pulse = playing }

@@ -11,6 +11,7 @@ struct CollapsedWheelView: View {
     let calendar: CalendarStore
     let hasMedia: Bool
     let faceHeight: CGFloat
+    let scale: CGFloat
 
     init(
         position: CGFloat,
@@ -19,7 +20,8 @@ struct CollapsedWheelView: View {
         isPlaying: Bool,
         calendar: CalendarStore,
         hasMedia: Bool,
-        faceHeight: CGFloat
+        faceHeight: CGFloat,
+        scale: CGFloat = 1
     ) {
         self.position = position
         self.isSnapping = isSnapping
@@ -28,6 +30,7 @@ struct CollapsedWheelView: View {
         self.calendar = calendar
         self.hasMedia = hasMedia
         self.faceHeight = faceHeight
+        self.scale = scale
     }
 
     var body: some View {
@@ -50,9 +53,11 @@ struct CollapsedWheelView: View {
     private func face(for index: Int) -> some View {
         if index.isMultiple(of: 2), hasMedia {
             MiniNowPlayingView(artwork: artwork, isPlaying: isPlaying)
+                .environment(\.collapsedUIScale, scale)
                 .frame(height: faceHeight)
         } else {
             CalendarClockView(calendar: calendar)
+                .environment(\.collapsedUIScale, scale)
                 .frame(height: faceHeight)
         }
     }

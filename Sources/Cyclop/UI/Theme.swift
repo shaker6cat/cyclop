@@ -19,6 +19,10 @@ enum Theme {
     /// to tune without changing the expanded panel's character.
     static let collapsedTopRadius: CGFloat = 16
     static let collapsedBottomRadius: CGFloat = 16
+    /// The compact island is intentionally more legible than the camera cutout.
+    static let collapsedScale: CGFloat = 2
+    /// Breathing space between the folded island and the display edge.
+    static let collapsedTopGap: CGFloat = 5
     static let openTopRadius: CGFloat = 12
     static let openBottomRadius: CGFloat = 22
 
