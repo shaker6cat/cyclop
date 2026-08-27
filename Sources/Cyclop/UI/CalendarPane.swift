@@ -72,6 +72,7 @@ struct CalendarClockView: View {
             .foregroundStyle(.white.opacity(0.82))
             .lineLimit(1)
             .minimumScaleFactor(0.65)
+            .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

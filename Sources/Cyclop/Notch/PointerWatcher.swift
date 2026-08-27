@@ -25,6 +25,12 @@ final class PointerWatcher {
     /// things too — a drag, the menu bar, a tab that wants the keyboard.
     var isPanelOpen: () -> Bool = { false }
 
+    /// The compact island is deliberately click-to-expand. Keep this switch
+    /// separate from `openRect`: the latter still describes where the pointer
+    /// belongs while the panel is open, but must not turn a passive hover into
+    /// an expansion.
+    var opensOnHover = false
+
     /// Short enough to feel immediate, long enough that a pointer sweeping
     /// across the top of the screen does not trigger the panel.
     var openDelay: TimeInterval = 0.05
@@ -134,7 +140,9 @@ final class PointerWatcher {
             onInteractiveChange?(interactive)
         }
 
-        let inside = (isInside ? closeRect : openRect).contains(point)
+        let inside = isInside
+            ? closeRect.contains(point)
+            : (opensOnHover && openRect.contains(point))
 
         // Whether the panel is open and where the pointer is are two separate
         // facts, and only one of them is tracked here. They are supposed to

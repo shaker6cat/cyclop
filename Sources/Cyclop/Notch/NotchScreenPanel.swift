@@ -125,7 +125,16 @@ final class NotchScreenPanel {
         // Clicking away drops the keyboard but leaves the tab where it was, so
         // a click back into the panel has to be able to ask for it again.
         panel.onPress = { [weak self] in
-            guard let self, vm.tab.needsKeyboard else { return }
+            guard let self else { return }
+            if !state.isOpen {
+                // `onPress` is delivered only while the folded interactive
+                // rect is active. Claim the pointer before growing the rect,
+                // so the watcher does not interpret the click as a hover.
+                pointer.setInside(true)
+                setOpen(true)
+                return
+            }
+            guard vm.tab.needsKeyboard else { return }
             state.wantsKeyboard = true
         }
         panel.onScrollWheel = { [weak self] event in
@@ -148,12 +157,11 @@ final class NotchScreenPanel {
         // tab is shared, so a screen built while the teleprompter is up opens
         // straight into a body twice as deep as the rest.
         pointer.closeRect = geometry.hoverRect(for: state.openBodySize)
-        // Nothing under the notch means opening the moment the pointer arrives
-        // costs nothing. A notch with menu bar icons under it is the other
-        // case: a pointer crossing them is usually on its way to one of them,
-        // and unfolding the panel over what it was reaching for is the whole
-        // complaint. There, staying put is what asks for the panel.
-        pointer.openDelay = geometry.guardsIcons ? 0.3 : 0.05
+        // The compact island is deliberately passive on hover. Opening is a
+        // deliberate click handled by `panel.onPress`; this also prevents a
+        // pointer merely passing over the island from stealing the menu bar.
+        pointer.opensOnHover = false
+        pointer.openDelay = 0
         pointer.isDragging = { [weak root] in root?.isReceivingDrag ?? false }
         pointer.isPanelOpen = { [weak state] in state?.isOpen ?? false }
         pointer.onChange = { [weak self] inside in

@@ -10,8 +10,11 @@ enum Theme {
     static let paneOut = Animation.easeIn(duration: 0.12)
     static let artworkAnimation = Animation.easeOut(duration: 0.28)
 
-    static let collapsedTopRadius: CGFloat = 6
-    static let collapsedBottomRadius: CGFloat = 9
+    /// The folded island is a pill rather than a miniature copy of the open
+    /// panel. Keeping this value separate makes the compact silhouette easy
+    /// to tune without changing the expanded panel's character.
+    static let collapsedTopRadius: CGFloat = 16
+    static let collapsedBottomRadius: CGFloat = 16
     static let openTopRadius: CGFloat = 12
     static let openBottomRadius: CGFloat = 22
 
