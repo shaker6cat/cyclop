@@ -71,15 +71,18 @@ struct NotchContentView: View {
                 trailing
                     .padding(.trailing, 16)
                     .transition(.opacity)
-            } else if media.track != nil {
-                MiniNowPlayingView(
-                    artwork: media.artwork,
-                    isPlaying: media.isPlaying
-                )
-                .frame(width: panel.geometry.notchSize.width)
-                .transition(.opacity)
             } else {
-                Color.clear.frame(width: panel.geometry.notchSize.width, height: 1)
+                CollapsedWheelView(
+                    position: vm.collapsedWheelPosition,
+                    isSnapping: vm.collapsedWheelIsSnapping,
+                    artwork: media.artwork,
+                    isPlaying: media.isPlaying,
+                    calendar: vm.calendar,
+                    hasMedia: media.track != nil,
+                    faceHeight: panel.geometry.notchSize.height
+                )
+                    .frame(width: panel.geometry.notchSize.width)
+                    .transition(.opacity)
             }
         }
         .frame(height: panel.geometry.notchSize.height)
@@ -104,11 +107,7 @@ struct NotchContentView: View {
         case .snippets:
             counter(vm.snippets.items.count)
         case .calendar:
-            if let next = vm.calendar.next {
-                Text(CalendarPane.countdown(to: next, from: vm.calendar.now))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(next.isRunning ? Color.white.opacity(0.8) : Theme.tertiary)
-            }
+            EmptyView()
         case .translate:
             // Nothing: the columns name both languages already, and the strip
             // is the one part of the panel worth not spending on a repeat.
@@ -175,7 +174,7 @@ struct NotchContentView: View {
         case .clipboard:
             ClipboardPane(clipboard: vm.clipboard, privacy: vm.privacy)
         case .calendar:
-            CalendarPane(calendar: vm.calendar, privacy: vm.privacy)
+            CalendarPane(calendar: vm.calendar)
         case .snippets:
             SnippetsPane(snippets: vm.snippets, privacy: vm.privacy, wantsKeyboard: $panel.wantsKeyboard)
         case .translate:

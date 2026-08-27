@@ -129,6 +129,7 @@ final class PointerWatcher {
 
         let interactive = isDragging() || interactiveRect.contains(point)
         if wasInteractive != interactive {
+            NSLog("Cyclop: pointer %@ %@ collapsedRect=%@ point=(%.0f,%.0f)", isPanelOpen() ? "in expanded panel" : "in collapsed panel", interactive ? "entered" : "left", interactive ? "hit" : "miss", point.x, point.y)
             wasInteractive = interactive
             onInteractiveChange?(interactive)
         }
@@ -170,4 +171,3 @@ final class PointerWatcher {
         onChange?(inside)
     }
 }
-

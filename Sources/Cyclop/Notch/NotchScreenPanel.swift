@@ -128,6 +128,9 @@ final class NotchScreenPanel {
             guard let self, vm.tab.needsKeyboard else { return }
             state.wantsKeyboard = true
         }
+        panel.onScrollWheel = { [weak self] event in
+            self?.handleCollapsedScroll(event)
+        }
 
         panel.contentView = root
         panel.ignoresMouseEvents = true
@@ -360,5 +363,39 @@ final class NotchScreenPanel {
         pointer.interactiveRect = geometry
             .contentScreenRect(for: size)
             .insetBy(dx: open ? -Theme.openTopRadius : 0, dy: 0)
+    }
+
+    /// Treat one precise trackpad gesture as one wheel detent. The sign of the
+    /// delta is intentionally ignored: either direction toggles the two folded
+    /// widgets, like rotating a phone's click wheel.
+    func acceptsCollapsedScroll(at point: CGPoint) -> Bool {
+        !state.isOpen && geometry.collapsedGestureRect.contains(point)
+    }
+
+    func handleGlobalCollapsedScroll(deltaY: CGFloat, precise: Bool, momentum: Bool, phase: NSEvent.Phase) {
+        handleCollapsedScroll(deltaY: deltaY, precise: precise, momentum: momentum, phase: phase, source: "global")
+    }
+
+    private func handleCollapsedScroll(_ event: NSEvent) {
+        handleCollapsedScroll(
+            deltaY: event.scrollingDeltaY,
+            precise: event.hasPreciseScrollingDeltas,
+            momentum: event.momentumPhase != [],
+            phase: event.phase,
+            source: "panel"
+        )
+    }
+
+    private func handleCollapsedScroll(deltaY: CGFloat, precise: Bool, momentum: Bool, phase: NSEvent.Phase = [], source: String) {
+        guard !state.isOpen else {
+            NSLog("Cyclop: ignored %@ scroll because panel is expanded", source)
+            return
+        }
+        guard precise else {
+            NSLog("Cyclop: ignored %@ scroll because it is not a precise trackpad event", source)
+            return
+        }
+        NSLog("Cyclop: %@ collapsed scroll accepted delta=%.2f", source, deltaY)
+        vm.applyCollapsedWheel(deltaY: deltaY, phase: phase, momentum: momentum)
     }
 }

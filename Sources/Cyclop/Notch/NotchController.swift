@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Combine
 
 /// Owns the one shared `NotchViewModel` — the tab, the data, the running
@@ -11,12 +12,14 @@ final class NotchController {
     private var vm: NotchViewModel?
     private var panels: [CGDirectDisplayID: NotchScreenPanel] = [:]
     private var cancellables = Set<AnyCancellable>()
+    private var globalScrollMonitor: Any?
 
     func install() {
         let vm = NotchViewModel()
         self.vm = vm
         vm.start()
         rebuild()
+        installGlobalScrollMonitor()
 
         for name in [
             NSApplication.didChangeScreenParametersNotification,
@@ -47,6 +50,10 @@ final class NotchController {
     }
 
     func teardown() {
+        if let globalScrollMonitor {
+            NSEvent.removeMonitor(globalScrollMonitor)
+            self.globalScrollMonitor = nil
+        }
         vm?.stop()
         panels.values.forEach { $0.teardown() }
     }
@@ -61,6 +68,36 @@ final class NotchController {
     /// reads four sections and writes them one at a time, and a controller
     /// method per section would be four methods that only forward.
     var privacy: PrivacyMode? { vm?.privacy }
+
+    private func installGlobalScrollMonitor() {
+        requestAccessibilityAccess()
+        globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            let deltaY = event.scrollingDeltaY
+            let precise = event.hasPreciseScrollingDeltas
+            let momentum = event.momentumPhase != []
+            let point = NSEvent.mouseLocation
+            NSLog("Cyclop: global scroll observed y=%.2f precise=%@ phase=%@ momentum=%@ point=(%.0f,%.0f)", deltaY, precise ? "yes" : "no", String(describing: event.phase), momentum ? "yes" : "no", point.x, point.y)
+            Task { @MainActor in
+                guard let self,
+                      let panel = self.panels.values.first(where: { $0.acceptsCollapsedScroll(at: point) }) else {
+                    return
+                }
+                NSLog("Cyclop: global scroll hit collapsed region point=(%.0f,%.0f)", point.x, point.y)
+                panel.handleGlobalCollapsedScroll(deltaY: deltaY, precise: precise, momentum: momentum, phase: event.phase)
+            }
+        }
+        NSLog("Cyclop: global scroll monitor %@", globalScrollMonitor == nil ? "unavailable" : "installed")
+    }
+
+    private func requestAccessibilityAccess() {
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let options = [promptKey: true] as CFDictionary
+        let trusted = AXIsProcessTrustedWithOptions(options)
+        NSLog("Cyclop: accessibility permission trusted=%@", trusted ? "true" : "false")
+        if !trusted {
+            NSLog("Cyclop: allow Cyclop in System Settings → Privacy & Security → Accessibility, then restart Cyclop")
+        }
+    }
 
     // MARK: - Displays
 

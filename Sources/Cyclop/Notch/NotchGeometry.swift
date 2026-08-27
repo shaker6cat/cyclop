@@ -287,6 +287,20 @@ struct NotchGeometry {
     /// Size of the collapsed target: the notch itself, or the strip above.
     var collapsedSize: CGSize { CGSize(width: notchSize.width, height: collapsedDepth) }
 
+    /// A scroll gesture needs more vertical room than the invisible click
+    /// strip. Keep this region limited to the notch's horizontal span so it
+    /// does not interfere with menu-bar controls, but allow the pointer to
+    /// rest a little below the physical 8 pt strip while the user scrolls.
+    var collapsedGestureRect: CGRect {
+        let depth = max(collapsedDepth, 44)
+        return includingTopEdge(CGRect(
+            x: notchCenterX - notchSize.width / 2,
+            y: screen.frame.maxY - depth,
+            width: notchSize.width,
+            height: depth
+        ))
+    }
+
     /// Hover target while collapsed, in global screen coordinates. Slightly
     /// taller than the notch so the panel opens just before the pointer lands.
     var hoverRect: CGRect {

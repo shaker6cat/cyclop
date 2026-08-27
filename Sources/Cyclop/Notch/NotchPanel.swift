@@ -70,12 +70,19 @@ final class NotchPanel: NSPanel {
     /// mouse down first — so the one place a click on the field can reliably
     /// be noticed is here, where every event the window receives passes.
     var onPress: (() -> Void)?
+    /// Scroll events are forwarded so the folded notch can use a precise
+    /// trackpad gesture without making the expanded content scroll.
+    var onScrollWheel: ((NSEvent) -> Void)?
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown, editingAction(for: event) != nil, perform(event) { return }
         // Before `super`, so the window is already key by the time the click
         // reaches the field and places a caret.
         if event.type == .leftMouseDown { onPress?() }
+        if event.type == .scrollWheel {
+            NSLog("Cyclop: panel received scroll y=%.2f precise=%@ phase=%@ momentum=%@", event.scrollingDeltaY, event.hasPreciseScrollingDeltas ? "yes" : "no", String(describing: event.phase), String(describing: event.momentumPhase))
+            onScrollWheel?(event)
+        }
         super.sendEvent(event)
     }
 

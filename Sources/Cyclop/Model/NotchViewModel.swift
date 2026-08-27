@@ -3,6 +3,13 @@ import Combine
 
 @MainActor
 final class NotchViewModel: ObservableObject {
+    enum CollapsedDisplay: Equatable {
+        case media
+        case clock
+
+        var toggled: Self { self == .media ? .clock : .media }
+    }
+
     enum Tab: String, CaseIterable, Identifiable {
         case media, shelf, clipboard, snippets, calendar, translate, notes, teleprompter, settings
         var id: String { rawValue }
@@ -58,14 +65,75 @@ final class NotchViewModel: ObservableObject {
     /// `PanelState` about its own display.
     var isPanelActive = false
     var isTyping = false
+    /// Audio is the default when available; a completed trackpad gesture can
+    /// temporarily switch the folded notch to the clock.
+    @Published private(set) var collapsedDisplay: CollapsedDisplay = .media
+    @Published private(set) var collapsedWheelPosition: CGFloat = 0
+    @Published private(set) var collapsedWheelIsSnapping = false
+    private var collapsedWheelSnapWork: DispatchWorkItem?
+    private var collapsedWheelTick = 0
+    private var playedCollapsedClicks = Set<String>()
+
+    func toggleCollapsedDisplay() {
+        collapsedWheelPosition = CGFloat(Int(collapsedWheelPosition.rounded()) + 1)
+        collapsedDisplay = collapsedDisplay.toggled
+        playCollapsedClick(requestID: -1, step: Int(collapsedWheelPosition))
+    }
+
+    func applyCollapsedWheel(deltaY: CGFloat, phase: NSEvent.Phase, momentum: Bool) {
+        collapsedWheelSnapWork?.cancel()
+        collapsedWheelIsSnapping = false
+        let oldTick = Int(collapsedWheelPosition.rounded())
+        // A trackpad can deliver a very large momentum delta in one event.
+        // Cap one frame's travel so the two faces remain visible and the
+        // sound clock never has to catch up with dozens of skipped faces.
+        let movement = max(-0.35, min(0.35, -deltaY / 48))
+        collapsedWheelPosition += movement
+        let newTick = Int(collapsedWheelPosition.rounded())
+        if oldTick != newTick {
+            let direction = newTick >= oldTick ? 1 : -1
+            for tick in stride(from: oldTick + direction, through: newTick, by: direction) {
+                collapsedWheelTick += 1
+                playCollapsedClick(requestID: collapsedWheelTick, step: tick)
+                NSLog("Cyclop: wheel tick=%d position=%.3f click=played", tick, collapsedWheelPosition)
+            }
+        }
+        NSLog("Cyclop: wheel drag delta=%.2f movement=%.3f position=%.3f momentum=%@ phase=%@", deltaY, movement, collapsedWheelPosition, momentum ? "yes" : "no", String(describing: phase))
+
+        // AppKit emits the trackpad's momentum as a stream whose last event
+        // has no useful universal end marker. A quiet period therefore gives
+        // both native momentum and ordinary slow scrolling the same snap.
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.snapCollapsedWheel()
+        }
+        collapsedWheelSnapWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (momentum ? 0.12 : 0.18), execute: work)
+    }
+
+    private func snapCollapsedWheel() {
+        collapsedWheelSnapWork = nil
+        let target = CGFloat(Int(collapsedWheelPosition.rounded()))
+        collapsedWheelIsSnapping = true
+        collapsedWheelPosition = target
+        collapsedDisplay = target.truncatingRemainder(dividingBy: 2) == 0 ? .media : .clock
+        NSLog("Cyclop: wheel snap target=%d display=%@", Int(target), collapsedDisplay == .media ? "media" : "clock")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) { [weak self] in
+            self?.collapsedWheelIsSnapping = false
+        }
+    }
+
+    /// Several display panels observe the same spin request. Deduplicate the
+    /// click here so every detent has exactly one audible counterpart.
+    func playCollapsedClick(requestID: Int, step: Int) {
+        let key = "\(requestID):\(step)"
+        guard playedCollapsedClicks.insert(key).inserted else { return }
+        if playedCollapsedClicks.count > 80 { playedCollapsedClicks.removeAll() }
+        NSSound(contentsOfFile: "/System/Library/Sounds/Tink.aiff", byReference: true)?.play()
+    }
 
     @Published var tab: Tab = .media {
         didSet {
-            // Opening the tab only re-checks the status. The permission prompt
-            // is the user's own press on the button inside the pane: this is
-            // the one permission Cyclop asks for at all, and it deserves an
-            // explanation before the system dialog, not after.
-            if tab == .calendar { calendar.refreshAccess() }
             // The snippets file is edited from outside the app, so it is read
             // on the way in rather than held from launch.
             if tab == .snippets { snippets.reload() }
@@ -170,8 +238,6 @@ final class NotchViewModel: ObservableObject {
         media.start()
         shelf.load()
         snippets.reload()
-        // Only picks up where it left off if access was granted earlier; it
-        // never prompts on its own.
         calendar.start()
 
         // Screenshots reach the shelf through here whether they were taken on
